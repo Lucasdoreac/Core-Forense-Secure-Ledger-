@@ -1,0 +1,6 @@
+{
+  "name": "Core Forense Ledger Simulator",
+  "description": "Simulador interativo de auditoria forense, ledger criptográfico, RLS e prevenção de ataques em bancos de dados relacionais.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
