@@ -212,7 +212,16 @@ export default function App() {
       body: JSON.stringify({ sql })
     });
     
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      const titleMatch = text.match(/<pre>([\s\S]*?)<\/pre>/) || text.match(/<h1>([\s\S]*?)<\/h1>/);
+      const htmlMsg = titleMatch ? titleMatch[1].trim() : 'Erro de Comunicação ou Proxy';
+      throw { error: `Erro no Servidor (${res.status}): ${htmlMsg}` };
+    }
+    
     if (!res.ok) {
       throw data; // Pass exact custom Exception error back to term CLI
     }

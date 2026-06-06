@@ -487,53 +487,60 @@ app.post('/api/auditoria/adulterar', (req: Request, res: Response) => {
 
 // Executar DDL simulating admin sabotages protected by Event Triggers
 app.post('/api/executar-ddl', (req: Request, res: Response) => {
-  const { sql } = req.body;
-  const sqlClean = sql.trim().toUpperCase();
+  try {
+    const { sql } = req.body;
+    if (!sql || typeof sql !== 'string') {
+      return res.status(400).json({ error: 'Comando SQL inválido ou ausente.' });
+    }
+    const sqlClean = sql.trim().toUpperCase();
 
-  if (db.eventTriggersEnabled) {
-    if (sqlClean.includes('DROP TABLE AUDITORIA_OPERACOES') || sqlClean.includes('DROP TABLE DE_AUDITORIA')) {
-      return res.status(403).json({
-        code: 'insufficient_privilege',
-        error: `VIOLAÇÃO CRÍTICA DE DIRETRIZ ISDS: A remoção física (public.auditoria_operacoes) de infraestruturas forenses e de controle de acesso é sumariamente proibida. (Event Trigger evt_bloquear_drop_critico ACIONADO)`
-      });
+    if (db.eventTriggersEnabled) {
+      if (sqlClean.includes('DROP TABLE AUDITORIA_OPERACOES') || sqlClean.includes('DROP TABLE DE_AUDITORIA')) {
+        return res.status(403).json({
+          code: 'insufficient_privilege',
+          error: `VIOLAÇÃO CRÍTICA DE DIRETRIZ ISDS: A remoção física (public.auditoria_operacoes) de infraestruturas forenses e de controle de acesso é sumariamente proibida. (Event Trigger evt_bloquear_drop_critico ACIONADO)`
+        });
+      }
+
+      if (sqlClean.includes('DROP TABLE DOCUMENTOS_SENSIVEIS')) {
+        return res.status(403).json({
+          code: 'insufficient_privilege',
+          error: `VIOLAÇÃO CRÍTICA DE DIRETRIZ ISDS: A remoção física (public.documentos_sensiveis) de infraestruturas forenses e de controle de acesso é sumariamente proibida. (Event Trigger evt_bloquear_drop_critico ACIONADO)`
+        });
+      }
+
+      if (sqlClean.includes('DISABLE TRIGGER') || sqlClean.includes('DISABLE TRIGGER ALL') || sqlClean.includes('DISABLE TRIGGER trg_seguranca_documentos')) {
+        return res.status(403).json({
+          code: 'insufficient_privilege',
+          error: `VIOLAÇÃO CRÍTICA DE DIRETRIZ ISDS: Modificações estruturais ou desativação de triggers nas tabelas de segurança (public.documentos_sensiveis) são bloqueadas por mecanismo interno de defesa. (Event Trigger evt_bloquear_ddl_critico ACIONADO)`
+        });
+      }
+    }
+
+    // If event triggers are off, process simulation
+    if (sqlClean.includes('DROP TABLE AUDITORIA_OPERACOES')) {
+      db.auditoria = [];
+      return res.json({ success: true, message: 'Executado com sucesso: Tabela auditoria_operacoes foi DESTRUÍDA. Todos os dados forenses históricos sumiram!' });
     }
 
     if (sqlClean.includes('DROP TABLE DOCUMENTOS_SENSIVEIS')) {
-      return res.status(403).json({
-        code: 'insufficient_privilege',
-        error: `VIOLAÇÃO CRÍTICA DE DIRETRIZ ISDS: A remoção física (public.documentos_sensiveis) de infraestruturas forenses e de controle de acesso é sumariamente proibida. (Event Trigger evt_bloquear_drop_critico ACIONADO)`
-      });
+      db.documentos = [];
+      return res.json({ success: true, message: 'Executado com sucesso: Tabela documentos_sensiveis excluída física e irrevogavelmente.' });
     }
 
-    if (sqlClean.includes('DISABLE TRIGGER') || sqlClean.includes('DISABLE TRIGGER ALL') || sqlClean.includes('DISABLE TRIGGER trg_seguranca_documentos')) {
-      return res.status(403).json({
-        code: 'insufficient_privilege',
-        error: `VIOLAÇÃO CRÍTICA DE DIRETRIZ ISDS: Modificações estruturais ou desativação de triggers nas tabelas de segurança (public.documentos_sensiveis) são bloqueadas por mecanismo interno de defesa. (Event Trigger evt_bloquear_ddl_critico ACIONADO)`
-      });
+    if (sqlClean.includes('DISABLE TRIGGER ALL') || sqlClean.includes('DISABLE TRIGGER')) {
+      db.triggersEnabled = false;
+      return res.json({ success: true, message: 'Executado com sucesso: Triggers de segurança desativadas na tabela de documentos e auditoria.' });
     }
-  }
 
-  // If event triggers are off, process simulation
-  if (sqlClean.includes('DROP TABLE AUDITORIA_OPERACOES')) {
-    db.auditoria = [];
-    return res.json({ success: true, message: 'Executado com sucesso: Tabela auditoria_operacoes foi DESTRUÍDA. Todos os dados forenses históricos sumiram!' });
-  }
+    if (sqlClean.includes('SELECT')) {
+      return res.json({ success: true, message: 'Comando executado: Registros selecionados com sucesso aplicando filtros ativos.' });
+    }
 
-  if (sqlClean.includes('DROP TABLE DOCUMENTOS_SENSIVEIS')) {
-    db.documentos = [];
-    return res.json({ success: true, message: 'Executado com sucesso: Tabela documentos_sensiveis excluída física e irrevogavelmente.' });
+    return res.json({ success: true, message: `Comando executado: ${sql.substring(0, 40)}... executado com sucesso.` });
+  } catch (err: any) {
+    return res.status(500).json({ error: `Erro no interpretador SQL: ${err.message}` });
   }
-
-  if (sqlClean.includes('DISABLE TRIGGER ALL') || sqlClean.includes('DISABLE TRIGGER')) {
-    db.triggersEnabled = false;
-    return res.json({ success: true, message: 'Executado com sucesso: Triggers de segurança desativadas na tabela de documentos e auditoria.' });
-  }
-
-  if (sqlClean.includes('SELECT')) {
-    return res.json({ success: true, message: 'Comando executado: Registros selecionados com sucesso aplicando filtros ativos.' });
-  }
-
-  res.json({ success: true, message: `Comando executado: ${sql.substring(0, 40)}... executado com sucesso.` });
 });
 
 // WORM Partition Management API
